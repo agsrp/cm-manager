@@ -152,14 +152,20 @@ export default async function handler(req, res) {
           }
           messageBody = parts.join(' • ');
         } else {
-          const parts = [];
-          if (sub.notify_agenda && upcomingPosts && upcomingPosts.length > 0) {
-            parts.push(`Tienes ${upcomingPosts.length} post(s) en agenda.`);
-          }
-          if (sub.notify_ideas && ideas && ideas.length > 0) {
-            parts.push(`Tienes ${ideas.length} idea(s) pendientes.`);
-          }
-          messageBody = parts.join(' ') || 'Recuerda revisar tus tareas e ideas del día en CM Manager.';
+          const genericMessages = [
+            '💡 Revisá tus ideas en la app, ¡hay varias esperando para ser producidas!',
+            '📹 Fijate que tenés un video pendiente para organizar hoy.',
+            '🎥 Mañana tenés sesión de rodaje programada. Prepará las cosas.',
+            '🚀 ¡Apurate que tenés que subir o programar el video de hoy!',
+            '✂️ Acordate de avanzar con la edición de los videos pendientes.',
+            '📌 Chequeá la agenda del día para no pasar por alto ningún compromiso.',
+            '⚡ Pasate por la app a revisar cómo vienen tus publicaciones esta semana.',
+            '🎬 Un ratito de planificación te ahorra tiempo. Revisá tus ideas guardadas.',
+            '📅 Mañana tenés actividades agendadas en tu calendario.',
+            '🌟 Fijate en tus ideas pendientes. ¡Es un buen momento para crear contenido!'
+          ];
+          const randomMsg = genericMessages[Math.floor(Math.random() * genericMessages.length)];
+          messageBody = randomMsg;
           targetUrl = '/calendar';
         }
 
