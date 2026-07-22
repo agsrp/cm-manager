@@ -35,8 +35,8 @@ setInterval(() => {
 
     self.registration.showNotification('CM Manager - Recordatorio', {
       body: bodyMsg,
-      icon: '/pwa-192x192.png',
-      badge: '/pwa-192x192.png',
+      icon: '/notification-icon-192x192.png',
+      badge: '/notification-badge-96x96.png',
       vibrate: [200, 100, 200],
       data: { url: '/calendar' },
     });
@@ -54,8 +54,8 @@ self.addEventListener('push', function (event) {
 
     const options = {
       body: data.body || 'Tienes un nuevo mensaje de CM Manager.',
-      icon: data.icon || '/pwa-192x192.png',
-      badge: '/pwa-192x192.png',
+      icon: data.icon || '/notification-icon-192x192.png',
+      badge: '/notification-badge-96x96.png',
       vibrate: [200, 100, 200],
       data: {
         dateOfArrival: Date.now(),
