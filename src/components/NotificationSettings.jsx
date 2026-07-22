@@ -151,35 +151,40 @@ export default function NotificationSettings() {
     }
 
     setSaving(true);
+
     try {
-      // 1. Try OneSignal Web SDK subscription if available
-      let onesignalSubId = null;
-      if (window.OneSignal) {
-        try {
-          await window.OneSignal.Notifications.requestPermission();
-          onesignalSubId = window.OneSignal.User?.PushSubscription?.id;
-        } catch (e) {
-          console.warn('OneSignal Web SDK prompt notice:', e);
-        }
-      }
-
-      // Direct user action: Request notification permission first
+      // 1. MUST BE FIRST: Request browser permission immediately on user click gesture (Mandatory for iOS Safari 16.4+)
+      let permission = 'granted';
       if ('Notification' in window) {
-        const permission = await Notification.requestPermission();
+        permission = Notification.permission;
         if (permission !== 'granted') {
-          alert('Permiso de notificaciones denegado. Debes habilitarlo en los permisos de tu navegador o sistema.');
-          setSaving(false);
-          return;
+          permission = await Notification.requestPermission();
         }
       }
 
-      // Ensure SW is registered
-      let registration = await navigator.serviceWorker.getRegistration();
-      if (!registration) {
-        registration = await navigator.serviceWorker.register('/sw.js');
+      if (permission !== 'granted') {
+        alert('Permiso de notificaciones denegado. Puedes habilitarlo en los Ajustes de Notificaciones de tu iPhone o navegador.');
+        return;
       }
-      await navigator.serviceWorker.ready;
 
+      // 2. Ensure Service Worker registration without hanging iOS PWA
+      let registration = null;
+      if ('serviceWorker' in navigator) {
+        registration = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((resolve) => setTimeout(() => resolve(null), 2500))
+        ]);
+
+        if (!registration) {
+          registration = await navigator.serviceWorker.register('/sw.js');
+        }
+      }
+
+      if (!registration) {
+        throw new Error('No se pudo inicializar el Service Worker en este dispositivo.');
+      }
+
+      // 3. Try PushManager subscription safely
       let pushSub = await registration.pushManager.getSubscription();
 
       if (!pushSub) {
@@ -189,10 +194,25 @@ export default function NotificationSettings() {
         });
       }
 
+      if (!pushSub) {
+        throw new Error('No se generó la clave de suscripción Push.');
+      }
+
       const subData = JSON.parse(JSON.stringify(pushSub));
+
+      // 4. Check OneSignal SDK ID in background if present (non-blocking)
+      let onesignalSubId = null;
+      if (window.OneSignal && window.OneSignal.User) {
+        try {
+          onesignalSubId = window.OneSignal.User.PushSubscription?.id;
+        } catch (e) {
+          console.warn('OneSignal ID check skipped:', e);
+        }
+      }
+
       const endpointVal = onesignalSubId ? `onesignal:${onesignalSubId}` : subData.endpoint;
 
-      // Save to Supabase
+      // 5. Save to Supabase
       const payload = {
         user_id: user.id,
         endpoint: endpointVal,
@@ -214,10 +234,11 @@ export default function NotificationSettings() {
       await checkSubscription();
       alert('¡Notificaciones activadas con éxito en este dispositivo!');
     } catch (err) {
-      console.error('Error suscribiendo:', err);
+      console.error('Error al activar notificaciones en iOS/Navegador:', err);
       alert(`Error al activar notificaciones: ${err.message || err}`);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleTestNotification = async () => {
