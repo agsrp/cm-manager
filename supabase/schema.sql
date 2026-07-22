@@ -192,7 +192,7 @@ create table if not exists public.private_activities (
   created_at timestamptz default now()
 );
 
--- Row Level Security (RLS) - Solo visible y gestionable por el propio usuario
+-- Row Level Security (RLS) - Solo visible y gestionable por el propio usuario (100% Privado)
 alter table public.private_activities enable row level security;
 
 drop policy if exists "private_activities_user_all" on public.private_activities;
@@ -200,22 +200,8 @@ create policy "private_activities_user_all"
 on public.private_activities
 for all
 to authenticated
--- RLS Policies para el motor de notificaciones del backend
-drop policy if exists "push_subscriptions_service_all" on public.push_subscriptions;
-create policy "push_subscriptions_service_all"
-on public.push_subscriptions
-for all
-to anon, service_role, authenticated
-using (true)
-with check (true);
-
-drop policy if exists "private_activities_service_all" on public.private_activities;
-create policy "private_activities_service_all"
-on public.private_activities
-for all
-to anon, service_role
-using (true)
-with check (true);
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
 
 -- Columna para rastreo de notificaciones de estado
 alter table public.private_activities add column if not exists notification_sent boolean default false;
@@ -224,6 +210,55 @@ alter table public.posts add column if not exists notification_sent boolean defa
 -- Índices adicionales de notificación
 create index if not exists private_activities_notification_sent_idx on public.private_activities (notification_sent);
 create index if not exists posts_notification_sent_idx on public.posts (notification_sent);
+
+-- =====================================================
+-- Función de Servidor Segura (SECURITY DEFINER)
+-- Permite procesar notificaciones sin romper la privacidad de RLS
+-- =====================================================
+create or replace function public.get_due_push_payloads()
+returns table (
+  subscription_id uuid,
+  user_id uuid,
+  endpoint text,
+  p256dh text,
+  auth text,
+  notify_ideas boolean,
+  notify_agenda boolean,
+  notify_times text[],
+  due_activity_title text,
+  due_post_title text,
+  due_activity_id uuid,
+  due_post_id uuid
+)
+language plpgsql
+security definer
+as $$
+begin
+  return query
+  select 
+    ps.id as subscription_id,
+    ps.user_id,
+    ps.endpoint,
+    ps.p256dh,
+    ps.auth,
+    ps.notify_ideas,
+    ps.notify_agenda,
+    ps.notify_times,
+    pa.title as due_activity_title,
+    po.title as due_post_title,
+    pa.id as due_activity_id,
+    po.id as due_post_id
+  from public.push_subscriptions ps
+  left join public.private_activities pa on pa.user_id = ps.user_id 
+    and pa.date <= now() 
+    and (pa.notification_sent is null or pa.notification_sent = false)
+    and pa.status not in ('completed', 'cancelled')
+  left join public.posts po on po.post_date <= now() 
+    and (po.notification_sent is null or po.notification_sent = false)
+    and po.status not in ('published', 'idea');
+end;
+$$;
+
 
 
 
