@@ -241,6 +241,34 @@ export default function NotificationSettings() {
     }
   };
 
+  const handleUnsubscribe = async () => {
+    setSaving(true);
+    try {
+      if ('serviceWorker' in navigator && 'PushManager' in window) {
+        const registration = await navigator.serviceWorker.ready;
+        const localSub = await registration.pushManager.getSubscription();
+        if (localSub) {
+          await localSub.unsubscribe();
+        }
+      }
+
+      if (subscription?.id) {
+        await supabase
+          .from('push_subscriptions')
+          .delete()
+          .eq('id', subscription.id);
+      }
+
+      setSubscription(null);
+      alert('Notificaciones desactivadas correctamente en este dispositivo.');
+    } catch (err) {
+      console.error('Error al desactivar notificaciones:', err);
+      alert('Error al desactivar notificaciones.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleTestNotification = async () => {
     if (!user) return;
 
@@ -394,92 +422,45 @@ export default function NotificationSettings() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Content Preferences */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-bold text-white uppercase tracking-wider">¿Qué deseas recibir?</h4>
-                
-                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-white/5 hover:bg-white/10 transition border border-white/5">
-                  <input 
-                    type="checkbox" 
-                    checked={prefs.notify_agenda}
-                    onChange={(e) => setPrefs(p => ({ ...p, notify_agenda: e.target.checked }))}
-                    className="h-5 w-5 rounded border-white/20 bg-slate-800 text-violet-500" 
-                  />
-                  <div>
-                    <p className="font-bold text-sm text-white">Eventos de Agenda</p>
-                    <p className="text-xs text-slate-400">Recordatorios de posts y compromisos cercanos.</p>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-white/5 hover:bg-white/10 transition border border-white/5">
-                  <input 
-                    type="checkbox" 
-                    checked={prefs.notify_ideas}
-                    onChange={(e) => setPrefs(p => ({ ...p, notify_ideas: e.target.checked }))}
-                    className="h-5 w-5 rounded border-white/20 bg-slate-800 text-violet-500" 
-                  />
-                  <div>
-                    <p className="font-bold text-sm text-white">Recordatorio de Ideas</p>
-                    <p className="text-xs text-slate-400">Un empujón para revisar tus ideas destacadas o pendientes.</p>
-                  </div>
-                </label>
-              </div>
-
-              {/* Timing Preferences */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">Horarios Diarios (Máx 3)</h4>
-                  <button 
-                    onClick={applyPresetTimes}
-                    className="text-xs text-violet-400 hover:text-violet-300 underline font-medium"
-                  >
-                    Estándar UX Óptimo (3 al día)
-                  </button>
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Tipos de alerta activa</h4>
+              
+              <label className="flex items-center gap-3 cursor-pointer p-3.5 rounded-2xl bg-white/5 hover:bg-white/10 transition border border-white/10">
+                <input 
+                  type="checkbox" 
+                  checked={prefs.notify_agenda}
+                  onChange={(e) => setPrefs(p => ({ ...p, notify_agenda: e.target.checked }))}
+                  className="h-5 w-5 rounded border-white/20 bg-slate-800 text-violet-500" 
+                />
+                <div>
+                  <p className="font-bold text-sm text-white">Eventos de Agenda</p>
+                  <p className="text-xs text-slate-400">Recordatorios de posts y compromisos cercanos.</p>
                 </div>
-                <p className="text-xs text-slate-400">
-                  Configurado en 3 momentos clave (Mañana, Tarde, Noche) para maximizar la atención sin sobrecargar.
-                </p>
-                
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="time" 
-                    value={newTime}
-                    onChange={(e) => setNewTime(e.target.value)}
-                    className="input-glass"
-                  />
-                  <button 
-                    onClick={addTime} 
-                    disabled={prefs.notify_times.length >= 3}
-                    className="btn-glass bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Añadir
-                  </button>
-                </div>
+              </label>
 
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {prefs.notify_times.length === 0 && <span className="text-xs text-slate-400">No hay horarios configurados.</span>}
-                  {prefs.notify_times.map(time => {
-                    let label = 'Personalizado';
-                    if (time === '09:00') label = '🌅 Mañana';
-                    else if (time === '14:00') label = '☀️ Tarde';
-                    else if (time === '19:00') label = '🌙 Noche';
-
-                    return (
-                      <div key={time} className="flex items-center gap-2 bg-violet-500/20 border border-violet-500/30 text-violet-300 px-3 py-1.5 rounded-xl text-sm font-bold">
-                        <Clock size={14} />
-                        <span>{label} ({time})</span>
-                        <button onClick={() => removeTime(time)} className="ml-2 text-violet-300 hover:text-white transition">
-                          &times;
-                        </button>
-                      </div>
-                    );
-                  })}
+              <label className="flex items-center gap-3 cursor-pointer p-3.5 rounded-2xl bg-white/5 hover:bg-white/10 transition border border-white/10">
+                <input 
+                  type="checkbox" 
+                  checked={prefs.notify_ideas}
+                  onChange={(e) => setPrefs(p => ({ ...p, notify_ideas: e.target.checked }))}
+                  className="h-5 w-5 rounded border-white/20 bg-slate-800 text-violet-500" 
+                />
+                <div>
+                  <p className="font-bold text-sm text-white">Recordatorio de Ideas</p>
+                  <p className="text-xs text-slate-400">Un empujón para revisar tus ideas destacadas o pendientes.</p>
                 </div>
-              </div>
+              </label>
             </div>
 
-            <div className="flex justify-end pt-4 border-t border-white/10">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
+              <button
+                onClick={handleUnsubscribe}
+                disabled={saving}
+                className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs font-bold text-red-300 hover:bg-red-500/20 active:scale-95 transition"
+              >
+                {saving ? 'Procesando...' : 'Desactivar Notificaciones'}
+              </button>
+
               <button 
                 onClick={handleSavePreferences}
                 disabled={saving}
