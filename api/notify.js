@@ -99,12 +99,32 @@ export default async function handler(req, res) {
         if (isTargetTest) {
           messageBody = '¡Prueba exitosa! Las notificaciones Push funcionan correctamente en tu dispositivo.';
         } else {
+          // Query user specific private activities
+          let privateActs = [];
+          try {
+            const { data } = await supabase
+              .from('private_activities')
+              .select('title, date, category')
+              .eq('user_id', sub.user_id)
+              .neq('status', 'completed')
+              .gte('date', new Date(now.getTime() - 1000 * 60 * 30).toISOString())
+              .order('date', { ascending: true })
+              .limit(3);
+            privateActs = data || [];
+          } catch (e) {
+            console.warn('Notice querying private_activities:', e);
+          }
+
           const parts = [];
+          if (privateActs && privateActs.length > 0) {
+            const first = privateActs[0];
+            parts.push(`Actividad Privada: "${first.title}"`);
+          }
           if (sub.notify_agenda && upcomingPosts && upcomingPosts.length > 0) {
-            parts.push(`Tienes ${upcomingPosts.length} post(s) próximos en agenda.`);
+            parts.push(`Tienes ${upcomingPosts.length} post(s) en agenda.`);
           }
           if (sub.notify_ideas && ideas && ideas.length > 0) {
-            parts.push(`Tienes ${ideas.length} idea(s) pendientes de guion.`);
+            parts.push(`Tienes ${ideas.length} idea(s) pendientes.`);
           }
           messageBody = parts.join(' ') || 'Recuerda revisar tus tareas e ideas del día en CM Manager.';
         }
