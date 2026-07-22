@@ -86,7 +86,21 @@ export default function NotificationSettings() {
     
     setSaving(true);
     try {
-      const registration = await navigator.serviceWorker.ready;
+      // Ensure SW is registered
+      let registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        registration = await navigator.serviceWorker.register('/sw.js');
+      }
+      await navigator.serviceWorker.ready;
+
+      // Explicitly request Notification Permission
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        alert('Permiso de notificaciones denegado. Debes habilitarlo en los permisos de tu navegador o sistema.');
+        setSaving(false);
+        return;
+      }
+
       let pushSub = await registration.pushManager.getSubscription();
       
       if (!pushSub) {
@@ -119,9 +133,29 @@ export default function NotificationSettings() {
       alert('¡Notificaciones activadas con éxito!');
     } catch (err) {
       console.error('Error suscribiendo:', err);
-      alert('Error al activar las notificaciones. Verifica que hayas dado permisos en el navegador.');
+      alert('Error al activar las notificaciones. Revisa la consola o los permisos del navegador.');
     }
     setSaving(false);
+  };
+
+  const handleTestNotification = async () => {
+    try {
+      let registration = await navigator.serviceWorker.ready;
+      if (registration) {
+        registration.showNotification('CM Manager - Prueba Local', {
+          body: '¡Las notificaciones Push en tu dispositivo están activas y funcionando!',
+          icon: '/pwa-192x192.png',
+          vibrate: [200, 100, 200]
+        });
+      }
+
+      // Trigger backend test push
+      if (user) {
+        fetch(`/api/notify?test=true&user_id=${user.id}`).catch(() => {});
+      }
+    } catch (err) {
+      console.error('Error en prueba:', err);
+    }
   };
 
   const handleSavePreferences = async () => {
@@ -203,7 +237,7 @@ export default function NotificationSettings() {
           </div>
         ) : (
           <div className="space-y-6 border-t border-white/10 pt-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="font-bold text-emerald-400 flex items-center gap-2">
                   <ShieldCheck size={18} />
@@ -211,6 +245,13 @@ export default function NotificationSettings() {
                 </h3>
                 <p className="text-xs text-slate-400">Puedes modificar tus preferencias de alertas a continuación.</p>
               </div>
+              <button 
+                onClick={handleTestNotification}
+                className="btn-glass text-xs py-2 px-3.5 flex items-center gap-2 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 transition"
+              >
+                <Bell size={14} />
+                Enviar Notificación de Prueba
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
