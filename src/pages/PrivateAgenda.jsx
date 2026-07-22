@@ -6,6 +6,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import GlassModal from '../components/GlassModal';
+import ConfirmModal from '../components/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Lock,
@@ -283,15 +284,23 @@ export default function PrivateAgenda() {
     }
   };
 
-  const handleDeleteActivity = async (activityId) => {
-    const confirmed = window.confirm('¿Estás seguro de que deseas eliminar esta actividad privada?');
-    if (!confirmed) return;
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [activityToDelete, setActivityToDelete] = useState(null);
 
-    const filtered = activities.filter((item) => item.id !== activityId);
+  const requestDeleteActivity = (activity) => {
+    setActivityToDelete(activity);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDeleteActivity = async () => {
+    if (!activityToDelete) return;
+    const actId = activityToDelete.id || activityToDelete;
+
+    const filtered = activities.filter((item) => item.id !== actId);
     setActivities(filtered);
     localStorage.setItem(localStorageKey, JSON.stringify(filtered));
 
-    if (selectedActivity?.id === activityId) {
+    if (selectedActivity?.id === actId) {
       setSelectedActivity(null);
       setDetailModalOpen(false);
     }
@@ -300,9 +309,12 @@ export default function PrivateAgenda() {
       await supabase
         .from('private_activities')
         .delete()
-        .eq('id', activityId)
+        .eq('id', actId)
         .eq('user_id', user.id);
     }
+
+    setDeleteConfirmOpen(false);
+    setActivityToDelete(null);
   };
 
   const openCreateModal = () => {
@@ -687,7 +699,7 @@ export default function PrivateAgenda() {
                         <Edit size={14} />
                       </button>
                       <button
-                        onClick={() => handleDeleteActivity(activity.id)}
+                        onClick={() => requestDeleteActivity(activity)}
                         className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-2 text-rose-300 hover:bg-rose-500/20 active:scale-95 transition"
                         title="Eliminar"
                       >
@@ -764,7 +776,7 @@ export default function PrivateAgenda() {
                 <Edit size={16} /> Editar
               </button>
               <button
-                onClick={() => handleDeleteActivity(selectedActivity.id)}
+                onClick={() => requestDeleteActivity(selectedActivity)}
                 className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-rose-300 hover:bg-rose-500/20 active:scale-95"
               >
                 <Trash2 size={16} />
@@ -804,13 +816,9 @@ export default function PrivateAgenda() {
               <select
                 className="input-glass"
                 value={form.category}
-                onChange={(e) => {
-                  const cat = e.target.value;
-                  const presetColor = CATEGORIES.find((c) => c.id === cat)?.color || form.color;
-                  setForm((p) => ({ ...p, category: cat, color: presetColor }));
-                }}
+                onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
               >
-                {CATEGORIES.map((cat) => (
+                {CATEGORIES.filter((c) => c.id !== 'Pública / Equipo').map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.label}
                   </option>
@@ -840,7 +848,7 @@ export default function PrivateAgenda() {
               <input
                 type="datetime-local"
                 required
-                className="input-glass text-xs"
+                className="input-glass"
                 value={form.date}
                 onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))}
               />
@@ -850,7 +858,7 @@ export default function PrivateAgenda() {
               <label className="label-glass">Fecha y Hora de Fin (Opcional)</label>
               <input
                 type="datetime-local"
-                className="input-glass text-xs"
+                className="input-glass"
                 value={form.end_date}
                 onChange={(e) => setForm((p) => ({ ...p, end_date: e.target.value }))}
               />
@@ -872,7 +880,7 @@ export default function PrivateAgenda() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="label-glass">Estado inicial</label>
+              <label className="label-glass">Estado</label>
               <select
                 className="input-glass"
                 value={form.status}
@@ -887,15 +895,15 @@ export default function PrivateAgenda() {
             </div>
 
             <div>
-              <label className="label-glass">Color en el calendario</label>
-              <div className="flex items-center gap-2 pt-1">
+              <label className="label-glass">Color Distintivo</label>
+              <div className="flex items-center gap-2 mt-1">
                 {PRESET_COLORS.map((c) => (
                   <button
                     key={c}
                     type="button"
                     onClick={() => setForm((p) => ({ ...p, color: c }))}
-                    className={`h-7 w-7 rounded-full border-2 transition ${
-                      form.color === c ? 'border-white scale-110 shadow-md' : 'border-transparent opacity-70 hover:opacity-100'
+                    className={`h-7 w-7 rounded-xl transition ${
+                      form.color === c ? 'ring-2 ring-white scale-110' : 'opacity-70 hover:opacity-100'
                     }`}
                     style={{ backgroundColor: c }}
                   />
@@ -950,6 +958,18 @@ export default function PrivateAgenda() {
           </div>
         </form>
       </GlassModal>
+
+      {/* Modal gráfico de confirmación de eliminación de actividad privada */}
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onConfirm={handleConfirmDeleteActivity}
+        title="¿Eliminar actividad privada?"
+        message={`¿Estás seguro de que deseas eliminar la actividad "${activityToDelete?.title || ''}"? Esta acción es irreversible.`}
+        confirmText="Eliminar Actividad"
+        cancelText="Cancelar"
+        type="danger"
+      />
     </div>
   );
 }

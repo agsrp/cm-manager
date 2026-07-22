@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import GlassModal from './GlassModal';
+import ConfirmModal from './ConfirmModal';
 import { supabase } from '../lib/supabase';
 import { PLATFORMS, POST_STATUSES } from '../data/constants';
 import { format } from 'date-fns';
+import { Trash2 } from 'lucide-react';
 
 const emptyForm = {
   title: '',
@@ -33,7 +35,25 @@ export default function PostFormModal({
 }) {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [error, setError] = useState('');
+
+  const handleDeletePost = async () => {
+    if (!post?.id) return;
+    setDeleting(true);
+    const { error: delErr } = await supabase.from('posts').delete().eq('id', post.id);
+    setDeleting(false);
+    setDeleteConfirmOpen(false);
+
+    if (delErr) {
+      setError(delErr.message);
+      return;
+    }
+
+    await onSaved?.();
+    onClose();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -264,15 +284,44 @@ export default function PostFormModal({
           </div>
         ) : null}
 
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button type="button" onClick={onClose} className="btn-glass">
-            Cancelar
-          </button>
-          <button type="submit" disabled={saving} className="btn-primary">
-            {saving ? 'Guardando...' : post ? 'Actualizar post' : 'Crear post'}
-          </button>
+        <div className="flex flex-col-reverse justify-between gap-3 sm:flex-row border-t border-white/10 pt-4">
+          {post?.id ? (
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={saving}
+              className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs font-bold text-red-300 transition hover:bg-red-500/20 active:scale-95 flex items-center justify-center gap-2"
+            >
+              <Trash2 size={15} />
+              Eliminar Post
+            </button>
+          ) : (
+            <div />
+          )}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={onClose} className="btn-glass flex-1 sm:flex-initial">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1 sm:flex-initial">
+              {saving ? 'Guardando...' : post ? 'Actualizar post' : 'Crear post'}
+            </button>
+          </div>
         </div>
       </form>
+
+      {/* Modal de confirmación gráfica de eliminación */}
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onConfirm={handleDeletePost}
+        title="¿Eliminar post?"
+        message={`¿Estás seguro de que deseas eliminar "${form.title || 'este post'}"? Esta acción no se puede deshacer.`}
+        confirmText="Eliminar Post"
+        cancelText="Cancelar"
+        type="danger"
+        loading={deleting}
+      />
     </GlassModal>
   );
 }

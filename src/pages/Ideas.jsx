@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import PostFormModal from '../components/PostFormModal';
 import GlassModal from '../components/GlassModal';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Ideas() {
   const [ideas, setIdeas] = useState([]);
@@ -34,6 +35,10 @@ export default function Ideas() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Deletion Modal State
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [ideaToDelete, setIdeaToDelete] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -68,9 +73,6 @@ export default function Ideas() {
 
   // Promote Idea to Script
   const handlePromoteToScript = async (idea) => {
-    const confirmed = window.confirm(`¿Quieres enviar "${idea.title}" al pipeline como Guion?`);
-    if (!confirmed) return;
-
     setActionLoading(true);
     const { error } = await supabase
       .from('posts')
@@ -87,23 +89,30 @@ export default function Ideas() {
     }
   };
 
-  // Delete Idea
-  const handleDeleteIdea = async (idea) => {
-    const confirmed = window.confirm(`¿Estás seguro de que quieres eliminar la idea "${idea.title}"?`);
-    if (!confirmed) return;
+  // Trigger Delete Modal
+  const requestDeleteIdea = (idea) => {
+    setIdeaToDelete(idea);
+    setDeleteConfirmOpen(true);
+  };
+
+  // Perform Delete Idea
+  const handleConfirmDeleteIdea = async () => {
+    if (!ideaToDelete) return;
 
     setActionLoading(true);
     const { error } = await supabase
       .from('posts')
       .delete()
-      .eq('id', idea.id);
+      .eq('id', ideaToDelete.id);
     setActionLoading(false);
+    setDeleteConfirmOpen(false);
 
     if (error) {
       alert(error.message);
     } else {
       setSelectedIdeaId(null);
       setDetailModalOpen(false);
+      setIdeaToDelete(null);
       await fetchData();
     }
   };
@@ -218,7 +227,7 @@ export default function Ideas() {
 
           <button 
             disabled={actionLoading}
-            onClick={() => handleDeleteIdea(idea)} 
+            onClick={() => requestDeleteIdea(idea)} 
             className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300 transition hover:bg-red-500/20 active:scale-95 flex-1 sm:flex-initial"
           >
             <Trash2 size={16} className="mx-auto sm:mx-0" />
@@ -391,11 +400,23 @@ export default function Ideas() {
         post={selectedPostForModal}
         onSaved={async () => {
           await fetchData();
-          // If we edited the active idea, refresh its selection view
           if (selectedPostForModal) {
             setSelectedIdeaId(selectedPostForModal.id);
           }
         }}
+      />
+
+      {/* Modal gráfico de confirmación de eliminación de idea */}
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onConfirm={handleConfirmDeleteIdea}
+        title="¿Eliminar idea?"
+        message={`¿Estás seguro de que deseas eliminar la idea "${ideaToDelete?.title || ''}"? Esta acción no se puede deshacer.`}
+        confirmText="Eliminar Idea"
+        cancelText="Cancelar"
+        type="danger"
+        loading={actionLoading}
       />
     </div>
   );

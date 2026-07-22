@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
@@ -12,6 +13,7 @@ import {
   Settings,
   Sparkles,
 } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 
 const items = [
   { to: '/', label: 'Inicio', mobileLabel: 'Inicio', icon: Home, end: true },
@@ -75,9 +77,14 @@ export default function Layout() {
   const { user, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  const handleSignOut = async () => {
+  const handleSignOutConfirm = async () => {
+    setLoggingOut(true);
     await signOut();
+    setLoggingOut(false);
+    setLogoutConfirmOpen(false);
     navigate('/login', { replace: true });
   };
 
@@ -107,7 +114,7 @@ export default function Layout() {
             <p className="text-xs text-slate-400">Sesión activa</p>
             <p className="truncate text-sm font-semibold">{user?.email}</p>
           </div>
-          <button onClick={handleSignOut} className="btn-glass w-full">
+          <button onClick={() => setLogoutConfirmOpen(true)} className="btn-glass w-full">
             <LogOut size={16} />
             Cerrar sesión
           </button>
@@ -143,7 +150,7 @@ export default function Layout() {
             <MobileNavItem key={item.to} item={item} />
           ))}
 
-          <button onClick={handleSignOut} className="flex-1 min-w-[44px] shrink-0 text-center">
+          <button onClick={() => setLogoutConfirmOpen(true)} className="flex-1 min-w-[44px] shrink-0 text-center">
             <motion.span
               whileTap={{ scale: 0.92 }}
               className="flex flex-col items-center gap-0.5 rounded-xl py-1 text-[9.5px] font-semibold text-slate-400"
@@ -156,6 +163,19 @@ export default function Layout() {
           </button>
         </div>
       </nav>
+
+      {/* Modal de confirmación para cerrar sesión */}
+      <ConfirmModal
+        open={logoutConfirmOpen}
+        onClose={() => setLogoutConfirmOpen(false)}
+        onConfirm={handleSignOutConfirm}
+        title="¿Cerrar sesión?"
+        message="¿Estás seguro de que deseas salir de tu cuenta de CM Manager?"
+        confirmText="Cerrar Sesión"
+        cancelText="Cancelar"
+        type="warning"
+        loading={loggingOut}
+      />
     </div>
   );
 }

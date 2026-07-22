@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import GlassModal from '../components/GlassModal';
 import NotificationSettings from '../components/NotificationSettings';
+import ConfirmModal from '../components/ConfirmModal';
 import { Bell } from 'lucide-react';
 
 const PRESET_COLORS = [
@@ -146,23 +147,31 @@ export default function Config() {
     setFormModalOpen(true);
   };
 
-  const handleDeleteBrand = async (brandId, brandName) => {
-    const confirmed = window.confirm(
-      `¿Estás seguro de eliminar la marca "${brandName}"? Se eliminarán en cascada todos los posts vinculados a ella.`
-    );
-    if (!confirmed) return;
+  // Brand Deletion State & Handler
+  const [brandDeleteOpen, setBrandDeleteOpen] = useState(false);
+  const [brandToDelete, setBrandToDelete] = useState(null);
 
-    setDeletingId(brandId);
-    const { error } = await supabase.from('brands').delete().eq('id', brandId);
+  const requestDeleteBrand = (brandId, brandName) => {
+    setBrandToDelete({ id: brandId, name: brandName });
+    setBrandDeleteOpen(true);
+  };
+
+  const handleConfirmDeleteBrand = async () => {
+    if (!brandToDelete) return;
+
+    setDeletingId(brandToDelete.id);
+    const { error } = await supabase.from('brands').delete().eq('id', brandToDelete.id);
     setDeletingId(null);
+    setBrandDeleteOpen(false);
 
     if (error) {
       alert(error.message);
     } else {
-      if (editBrandId === brandId) {
+      if (editBrandId === brandToDelete.id) {
         setIsEditing(false);
         setForm(emptyForm);
       }
+      setBrandToDelete(null);
       await fetchBrands();
     }
   };
@@ -277,23 +286,30 @@ export default function Config() {
     }
   };
 
-  // Team member deletion handler
-  const handleDeleteMember = async (memberId, memberEmail) => {
-    const confirmed = window.confirm(
-      `¿Estás seguro de quitar a "${memberEmail}" del equipo?\n*Nota: Esto desvincula su perfil en la interfaz de gestión, para desactivar su login completo de Supabase Auth deberás hacerlo en tu panel de Supabase.*`
-    );
-    if (!confirmed) return;
+  // Team member deletion State & Handler
+  const [memberDeleteOpen, setMemberDeleteOpen] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState(null);
 
-    setMemberDeletingId(memberId);
+  const requestDeleteMember = (memberId, memberEmail) => {
+    setMemberToDelete({ id: memberId, email: memberEmail });
+    setMemberDeleteOpen(true);
+  };
+
+  const handleConfirmDeleteMember = async () => {
+    if (!memberToDelete) return;
+
+    setMemberDeletingId(memberToDelete.id);
     const { error } = await supabase
       .from('team_members')
       .delete()
-      .eq('id', memberId);
+      .eq('id', memberToDelete.id);
     setMemberDeletingId(null);
+    setMemberDeleteOpen(false);
 
     if (error) {
       alert(error.message);
     } else {
+      setMemberToDelete(null);
       await fetchTeamMembers();
     }
   };
@@ -554,7 +570,7 @@ export default function Config() {
                           <Edit size={14} />
                         </button>
                         <button
-                          onClick={() => handleDeleteBrand(brand.id, brand.name)}
+                          onClick={() => requestDeleteBrand(brand.id, brand.name)}
                           disabled={deletingId === brand.id}
                           className="rounded-xl border border-red-500/20 bg-red-500/10 p-2 text-red-300 transition hover:bg-red-500/20 active:scale-95"
                           title="Eliminar marca"
@@ -649,7 +665,7 @@ export default function Config() {
 
                       <div className="shrink-0">
                         <button
-                          onClick={() => handleDeleteMember(member.id, member.email)}
+                          onClick={() => requestDeleteMember(member.id, member.email)}
                           disabled={isSelf || memberDeletingId === member.id}
                           className="rounded-xl border border-red-500/20 bg-red-500/10 p-2 text-red-300 transition hover:bg-red-500/20 active:scale-95 disabled:opacity-40 disabled:hover:bg-red-500/10 disabled:cursor-not-allowed"
                           title={isSelf ? 'No puedes eliminarte a ti mismo' : 'Quitar miembro'}
@@ -777,6 +793,32 @@ export default function Config() {
           </div>
         </form>
       </GlassModal>
+
+      {/* Modal gráfico de confirmación de eliminación de marca */}
+      <ConfirmModal
+        open={brandDeleteOpen}
+        onClose={() => setBrandDeleteOpen(false)}
+        onConfirm={handleConfirmDeleteBrand}
+        title="¿Eliminar marca?"
+        message={`¿Estás seguro de eliminar la marca "${brandToDelete?.name || ''}"? Se eliminarán en cascada todos los posts vinculados a ella.`}
+        confirmText="Eliminar Marca"
+        cancelText="Cancelar"
+        type="danger"
+        loading={deletingId === brandToDelete?.id}
+      />
+
+      {/* Modal gráfico de confirmación de eliminación de miembro del equipo */}
+      <ConfirmModal
+        open={memberDeleteOpen}
+        onClose={() => setMemberDeleteOpen(false)}
+        onConfirm={handleConfirmDeleteMember}
+        title="¿Quitar miembro del equipo?"
+        message={`¿Estás seguro de quitar a "${memberToDelete?.email || ''}" del equipo?`}
+        confirmText="Quitar Miembro"
+        cancelText="Cancelar"
+        type="danger"
+        loading={memberDeletingId === memberToDelete?.id}
+      />
     </div>
   );
 }
