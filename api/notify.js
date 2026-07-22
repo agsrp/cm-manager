@@ -218,7 +218,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: `Procesadas ${subscriptions.length} suscripciones, enviadas ${notifications.length} notificaciones.`
+      subscriptions_found: subscriptions.length,
+      notifications_sent: notifications.length,
+      timestamp: now.toISOString()
     });
   } catch (err) {
     console.error('Unexpected error in notify API:', err);

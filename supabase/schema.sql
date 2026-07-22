@@ -200,8 +200,22 @@ create policy "private_activities_user_all"
 on public.private_activities
 for all
 to authenticated
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+-- RLS Policies para el motor de notificaciones del backend
+drop policy if exists "push_subscriptions_service_all" on public.push_subscriptions;
+create policy "push_subscriptions_service_all"
+on public.push_subscriptions
+for all
+to anon, service_role, authenticated
+using (true)
+with check (true);
+
+drop policy if exists "private_activities_service_all" on public.private_activities;
+create policy "private_activities_service_all"
+on public.private_activities
+for all
+to anon, service_role
+using (true)
+with check (true);
 
 -- Columna para rastreo de notificaciones de estado
 alter table public.private_activities add column if not exists notification_sent boolean default false;
@@ -210,6 +224,7 @@ alter table public.posts add column if not exists notification_sent boolean defa
 -- Índices adicionales de notificación
 create index if not exists private_activities_notification_sent_idx on public.private_activities (notification_sent);
 create index if not exists posts_notification_sent_idx on public.posts (notification_sent);
+
 
 
 
