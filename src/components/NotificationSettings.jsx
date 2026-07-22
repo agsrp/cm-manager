@@ -1,0 +1,292 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+import { Bell, Clock, Save, AlertTriangle, ShieldCheck } from 'lucide-react';
+
+const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+export default function NotificationSettings() {
+  const { user } = useAuth();
+  const [isSupported, setIsSupported] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [subscription, setSubscription] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [prefs, setPrefs] = useState({
+    notify_ideas: true,
+    notify_agenda: true,
+    notify_times: ['09:00', '18:00'],
+  });
+
+  const [newTime, setNewTime] = useState('12:00');
+
+  useEffect(() => {
+    // Check if push is supported
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      setIsSupported(true);
+    }
+
+    // Check if running as PWA (iOS requires this for push)
+    const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isPwa = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    
+    // We only force standalone requirement strongly on iOS, but let's check it generally
+    if (isIos && !isPwa) {
+      setIsStandalone(false);
+    } else {
+      setIsStandalone(true);
+    }
+
+    checkSubscription();
+  }, [user]);
+
+  const checkSubscription = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('push_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+        
+      if (data) {
+        setSubscription(data);
+        setPrefs({
+          notify_ideas: data.notify_ideas,
+          notify_agenda: data.notify_agenda,
+          notify_times: data.notify_times || [],
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setLoading(false);
+  };
+
+  const handleSubscribe = async () => {
+    if (!isSupported) {
+      alert('Las notificaciones Push no están soportadas en este navegador.');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      let pushSub = await registration.pushManager.getSubscription();
+      
+      if (!pushSub) {
+        pushSub = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+        });
+      }
+
+      const subData = JSON.parse(JSON.stringify(pushSub));
+
+      // Save to Supabase
+      const payload = {
+        user_id: user.id,
+        endpoint: subData.endpoint,
+        p256dh: subData.keys.p256dh,
+        auth: subData.keys.auth,
+        notify_ideas: prefs.notify_ideas,
+        notify_agenda: prefs.notify_agenda,
+        notify_times: prefs.notify_times,
+      };
+
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .upsert(payload, { onConflict: 'endpoint' });
+
+      if (error) throw error;
+      
+      await checkSubscription();
+      alert('¡Notificaciones activadas con éxito!');
+    } catch (err) {
+      console.error('Error suscribiendo:', err);
+      alert('Error al activar las notificaciones. Verifica que hayas dado permisos en el navegador.');
+    }
+    setSaving(false);
+  };
+
+  const handleSavePreferences = async () => {
+    if (!subscription) return;
+    
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .update({
+          notify_ideas: prefs.notify_ideas,
+          notify_agenda: prefs.notify_agenda,
+          notify_times: prefs.notify_times,
+        })
+        .eq('id', subscription.id);
+
+      if (error) throw error;
+      alert('Preferencias guardadas.');
+    } catch (err) {
+      console.error(err);
+      alert('Error al guardar preferencias.');
+    }
+    setSaving(false);
+  };
+
+  const addTime = () => {
+    if (!prefs.notify_times.includes(newTime)) {
+      setPrefs(p => ({ ...p, notify_times: [...p.notify_times, newTime].sort() }));
+    }
+  };
+
+  const removeTime = (time) => {
+    setPrefs(p => ({ ...p, notify_times: p.notify_times.filter(t => t !== time) }));
+  };
+
+  if (loading) return <div className="glass p-8 text-center text-slate-300">Cargando configuración...</div>;
+
+  return (
+    <div className="space-y-6">
+      
+      {!isStandalone && (
+        <div className="glass bg-amber-500/10 border-amber-500/20 p-4 rounded-2xl flex items-start gap-4">
+          <AlertTriangle className="text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-amber-400 font-bold">Instala la App (PWA)</h4>
+            <p className="text-sm text-slate-300 mt-1">
+              Para recibir notificaciones en tu dispositivo iOS (iPhone/iPad), debes instalar esta página como aplicación. Toca el botón <strong>Compartir</strong> y luego <strong>Añadir a la pantalla de inicio</strong>. Luego abre la app desde tu inicio.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="glass p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-500/20 text-blue-300">
+            <Bell size={24} />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-white">Notificaciones y Alertas</h2>
+            <p className="text-sm text-slate-400">Recibe resúmenes de tu agenda e ideas directamente en tu dispositivo.</p>
+          </div>
+        </div>
+
+        {!subscription ? (
+          <div className="text-center py-6 border-t border-white/10 mt-4">
+            <ShieldCheck size={48} className="mx-auto text-slate-500 mb-4" />
+            <h3 className="text-lg font-bold text-white">Activar Notificaciones</h3>
+            <p className="text-sm text-slate-400 mb-6 max-w-md mx-auto">
+              Permite a la aplicación enviarte notificaciones nativas de forma segura y 100% gratuita. Podrás configurar horarios y tipos de alerta.
+            </p>
+            <button 
+              onClick={handleSubscribe} 
+              disabled={!isStandalone || saving}
+              className="btn-primary"
+            >
+              <Bell size={18} />
+              {saving ? 'Activando...' : 'Permitir Notificaciones'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-6 border-t border-white/10 pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-emerald-400 flex items-center gap-2">
+                  <ShieldCheck size={18} />
+                  Suscrito en este dispositivo
+                </h3>
+                <p className="text-xs text-slate-400">Puedes modificar tus preferencias de alertas a continuación.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Content Preferences */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-white uppercase tracking-wider">¿Qué deseas recibir?</h4>
+                
+                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-white/5 hover:bg-white/10 transition border border-white/5">
+                  <input 
+                    type="checkbox" 
+                    checked={prefs.notify_agenda}
+                    onChange={(e) => setPrefs(p => ({ ...p, notify_agenda: e.target.checked }))}
+                    className="h-5 w-5 rounded border-white/20 bg-slate-800 text-violet-500" 
+                  />
+                  <div>
+                    <p className="font-bold text-sm text-white">Eventos de Agenda</p>
+                    <p className="text-xs text-slate-400">Recordatorios de posts y compromisos cercanos.</p>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-white/5 hover:bg-white/10 transition border border-white/5">
+                  <input 
+                    type="checkbox" 
+                    checked={prefs.notify_ideas}
+                    onChange={(e) => setPrefs(p => ({ ...p, notify_ideas: e.target.checked }))}
+                    className="h-5 w-5 rounded border-white/20 bg-slate-800 text-violet-500" 
+                  />
+                  <div>
+                    <p className="font-bold text-sm text-white">Recordatorio de Ideas</p>
+                    <p className="text-xs text-slate-400">Un empujón para revisar tus ideas destacadas o pendientes.</p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Timing Preferences */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-white uppercase tracking-wider">¿A qué horas del día?</h4>
+                
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="time" 
+                    value={newTime}
+                    onChange={(e) => setNewTime(e.target.value)}
+                    className="input-glass"
+                  />
+                  <button onClick={addTime} className="btn-glass bg-white/10">Añadir</button>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {prefs.notify_times.length === 0 && <span className="text-xs text-slate-400">No hay horarios configurados.</span>}
+                  {prefs.notify_times.map(time => (
+                    <div key={time} className="flex items-center gap-2 bg-violet-500/20 border border-violet-500/30 text-violet-300 px-3 py-1.5 rounded-xl text-sm font-bold">
+                      <Clock size={14} />
+                      {time}
+                      <button onClick={() => removeTime(time)} className="ml-2 text-violet-300 hover:text-white transition">
+                        &times;
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-white/10">
+              <button 
+                onClick={handleSavePreferences}
+                disabled={saving}
+                className="btn-primary"
+              >
+                <Save size={18} />
+                {saving ? 'Guardando...' : 'Guardar Preferencias'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
