@@ -159,29 +159,7 @@ using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
 drop policy if exists "push_subscriptions_anon_select" on public.push_subscriptions;
-create policy "push_subscriptions_anon_select"
-on public.push_subscriptions
-for select
-to anon
-using (true);
-
--- Row Level Security (RLS) - Solo visible y gestionable por el propio usuario (100% Privado)
-alter table public.private_activities enable row level security;
-
-drop policy if exists "private_activities_user_all" on public.private_activities;
-create policy "private_activities_user_all"
-on public.private_activities
-for all
-to authenticated
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
-
 drop policy if exists "private_activities_anon_select" on public.private_activities;
-create policy "private_activities_anon_select"
-on public.private_activities
-for select
-to anon
-using (true);
 
 -- Columna para rastreo de notificaciones de estado
 alter table public.private_activities add column if not exists notification_sent boolean default false;
