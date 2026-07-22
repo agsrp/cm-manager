@@ -1,0 +1,15 @@
+name: Trigger Push Notifications
+
+on:
+  schedule:
+    # Runs every 5 minutes 24/7 on GitHub servers (100% free)
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-notify-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send HTTP Ping to CM Manager API
+        run: |
+          curl -s -X GET "https://cm-manager-zeta.vercel.app/api/notify?cron=true" || true

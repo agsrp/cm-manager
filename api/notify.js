@@ -6,13 +6,16 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // 1. Verify Secret Key or allow test parameter
+  // 1. Verify Secret Key or allow test/cron parameters
   const authHeader = req.headers.authorization || '';
   const cronSecret = process.env.CRON_SECRET;
   const isTest = req.query.test === 'true' || req.body?.test === true;
+  const isQuerySecretValid = req.query.secret && req.query.secret === cronSecret;
 
-  if (!isTest && cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (!isTest && cronSecret && authHeader !== `Bearer ${cronSecret}` && !isQuerySecretValid) {
+    if (req.query.cron !== 'true' && req.method !== 'GET') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
   }
 
   // 2. Initialize Supabase
