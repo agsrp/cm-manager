@@ -59,26 +59,71 @@ export default function NotificationSettings() {
   }, [user]);
 
   const checkSubscription = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     try {
-      const { data } = await supabase
-        .from('push_subscriptions')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      let isSubscribedLocally = false;
+      let activeSub = null;
 
-      if (data) {
-        setSubscription(data);
+      if ('serviceWorker' in navigator && 'PushManager' in window) {
+        const registration = await navigator.serviceWorker.ready;
+        const localSub = await registration.pushManager.getSubscription();
+
+        if (localSub && localSub.endpoint) {
+          // Check database for THIS device's specific endpoint
+          const { data } = await supabase
+            .from('push_subscriptions')
+            .select('*')
+            .eq('endpoint', localSub.endpoint)
+            .maybeSingle();
+
+          if (data) {
+            activeSub = data;
+            isSubscribedLocally = true;
+          } else {
+            // Local subscription exists on phone but wasn't saved in DB yet, auto-save it
+            const subData = JSON.parse(JSON.stringify(localSub));
+            const payload = {
+              user_id: user.id,
+              endpoint: subData.endpoint,
+              p256dh: subData.keys.p256dh,
+              auth: subData.keys.auth,
+              notify_ideas: true,
+              notify_agenda: true,
+              notify_times: ['09:00', '18:00'],
+            };
+            const { data: inserted } = await supabase
+              .from('push_subscriptions')
+              .upsert(payload, { onConflict: 'endpoint' })
+              .select()
+              .single();
+
+            if (inserted) {
+              activeSub = inserted;
+              isSubscribedLocally = true;
+            }
+          }
+        }
+      }
+
+      if (isSubscribedLocally && activeSub) {
+        setSubscription(activeSub);
         setPrefs({
-          notify_ideas: Boolean(data.notify_ideas),
-          notify_agenda: Boolean(data.notify_agenda),
-          notify_times: data.notify_times || [],
+          notify_ideas: Boolean(activeSub.notify_ideas),
+          notify_agenda: Boolean(activeSub.notify_agenda),
+          notify_times: activeSub.notify_times || [],
         });
+      } else {
+        setSubscription(null);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error al verificar suscripción del dispositivo:', err);
+      setSubscription(null);
     }
+
     setLoading(false);
   };
 
@@ -146,6 +191,12 @@ export default function NotificationSettings() {
 
   const handleTestNotification = async () => {
     if (!user) return;
+
+    if (!subscription) {
+      alert('Este dispositivo no está suscrito aún. Haz clic en "Permitir Notificaciones" para activarlas en este dispositivo.');
+      return;
+    }
+
     setTesting(true);
 
     try {
