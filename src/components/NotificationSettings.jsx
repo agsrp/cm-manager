@@ -32,10 +32,10 @@ export default function NotificationSettings() {
   const [prefs, setPrefs] = useState({
     notify_ideas: true,
     notify_agenda: true,
-    notify_times: ['09:00', '18:00'],
+    notify_times: ['09:00', '14:00', '19:00'],
   });
 
-  const [newTime, setNewTime] = useState('12:00');
+  const [newTime, setNewTime] = useState('14:00');
 
   useEffect(() => {
     // Check if push is supported
@@ -292,6 +292,10 @@ export default function NotificationSettings() {
   };
 
   const addTime = () => {
+    if (prefs.notify_times.length >= 3) {
+      alert('Máximo 3 notificaciones al día según los estándares óptimos de UX/UI.');
+      return;
+    }
     if (!prefs.notify_times.includes(newTime)) {
       setPrefs(p => ({ ...p, notify_times: [...p.notify_times, newTime].sort() }));
     }
@@ -299,6 +303,10 @@ export default function NotificationSettings() {
 
   const removeTime = (time) => {
     setPrefs(p => ({ ...p, notify_times: p.notify_times.filter(t => t !== time) }));
+  };
+
+  const applyPresetTimes = () => {
+    setPrefs(p => ({ ...p, notify_times: ['09:00', '14:00', '19:00'] }));
   };
 
   if (loading) return <div className="glass p-8 text-center text-slate-300">Cargando configuración...</div>;
@@ -399,7 +407,18 @@ export default function NotificationSettings() {
 
               {/* Timing Preferences */}
               <div className="space-y-4">
-                <h4 className="text-sm font-bold text-white uppercase tracking-wider">¿A qué horas del día?</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">Horarios Diarios (Máx 3)</h4>
+                  <button 
+                    onClick={applyPresetTimes}
+                    className="text-xs text-violet-400 hover:text-violet-300 underline font-medium"
+                  >
+                    Estándar UX Óptimo (3 al día)
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Configurado en 3 momentos clave (Mañana, Tarde, Noche) para maximizar la atención sin sobrecargar.
+                </p>
                 
                 <div className="flex items-center gap-2">
                   <input 
@@ -408,20 +427,33 @@ export default function NotificationSettings() {
                     onChange={(e) => setNewTime(e.target.value)}
                     className="input-glass"
                   />
-                  <button onClick={addTime} className="btn-glass bg-white/10">Añadir</button>
+                  <button 
+                    onClick={addTime} 
+                    disabled={prefs.notify_times.length >= 3}
+                    className="btn-glass bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Añadir
+                  </button>
                 </div>
 
                 <div className="flex flex-wrap gap-2 mt-3">
                   {prefs.notify_times.length === 0 && <span className="text-xs text-slate-400">No hay horarios configurados.</span>}
-                  {prefs.notify_times.map(time => (
-                    <div key={time} className="flex items-center gap-2 bg-violet-500/20 border border-violet-500/30 text-violet-300 px-3 py-1.5 rounded-xl text-sm font-bold">
-                      <Clock size={14} />
-                      {time}
-                      <button onClick={() => removeTime(time)} className="ml-2 text-violet-300 hover:text-white transition">
-                        &times;
-                      </button>
-                    </div>
-                  ))}
+                  {prefs.notify_times.map(time => {
+                    let label = 'Personalizado';
+                    if (time === '09:00') label = '🌅 Mañana';
+                    else if (time === '14:00') label = '☀️ Tarde';
+                    else if (time === '19:00') label = '🌙 Noche';
+
+                    return (
+                      <div key={time} className="flex items-center gap-2 bg-violet-500/20 border border-violet-500/30 text-violet-300 px-3 py-1.5 rounded-xl text-sm font-bold">
+                        <Clock size={14} />
+                        <span>{label} ({time})</span>
+                        <button onClick={() => removeTime(time)} className="ml-2 text-violet-300 hover:text-white transition">
+                          &times;
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

@@ -142,7 +142,7 @@ create table if not exists public.push_subscriptions (
   auth text not null,
   notify_ideas boolean default true,
   notify_agenda boolean default true,
-  notify_times text[] default '{"09:00", "18:00"}',
+  notify_times text[] default '{"09:00", "14:00", "19:00"}',
   last_notified_at timestamptz,
   created_at timestamptz default now()
 );
