@@ -14,13 +14,13 @@ import {
 } from 'lucide-react';
 
 const items = [
-  { to: '/', label: 'Inicio', icon: Home, end: true },
-  { to: '/ideas', label: 'Ideas', icon: Lightbulb },
-  { to: '/pipeline', label: 'Pipeline', icon: Layers },
-  { to: '/calendar', label: 'Calendario', icon: CalendarDays },
-  { to: '/private', label: 'Agenda Privada', icon: Lock },
-  { to: '/production', label: 'Producción', icon: Clapperboard },
-  { to: '/config', label: 'Configuración', icon: Settings },
+  { to: '/', label: 'Inicio', mobileLabel: 'Inicio', icon: Home, end: true },
+  { to: '/ideas', label: 'Ideas', mobileLabel: 'Ideas', icon: Lightbulb },
+  { to: '/pipeline', label: 'Pipeline', mobileLabel: 'Pipeline', icon: Layers },
+  { to: '/calendar', label: 'Calendario', mobileLabel: 'Agenda', icon: CalendarDays },
+  { to: '/private', label: 'Agenda Privada', mobileLabel: 'Privada', icon: Lock },
+  { to: '/production', label: 'Producción', mobileLabel: 'Producción', icon: Clapperboard },
+  { to: '/config', label: 'Configuración', mobileLabel: 'Config', icon: Settings },
 ];
 
 function DesktopNavItem({ item }) {
@@ -45,24 +45,26 @@ function DesktopNavItem({ item }) {
 
 function MobileNavItem({ item }) {
   return (
-    <NavLink to={item.to} end={item.end} className="flex-1">
+    <NavLink to={item.to} end={item.end} className="flex-1 min-w-[48px] shrink-0 text-center">
       {({ isActive }) => (
         <motion.span
           whileTap={{ scale: 0.92 }}
-          className={`flex flex-col items-center gap-1 rounded-2xl px-1 py-1 text-[10px] font-semibold transition ${
+          className={`flex flex-col items-center gap-0.5 rounded-xl py-1 text-[9.5px] font-semibold transition ${
             isActive ? 'text-white' : 'text-slate-400'
           }`}
         >
           <span
-            className={`grid h-10 w-14 place-items-center rounded-2xl border transition ${
+            className={`grid h-8 w-8 place-items-center rounded-xl border transition ${
               isActive
-                ? 'border-white/20 bg-white/15'
-                : 'border-transparent bg-transparent'
+                ? 'border-white/20 bg-white/15 text-white'
+                : 'border-transparent bg-transparent text-slate-400'
             }`}
           >
-            <item.icon size={20} />
+            <item.icon size={18} />
           </span>
-          {item.label}
+          <span className="truncate w-full max-w-[56px] px-0.5 text-center leading-tight">
+            {item.mobileLabel || item.label}
+          </span>
         </motion.span>
       )}
     </NavLink>
@@ -135,21 +137,21 @@ export default function Layout() {
         </motion.div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/85 backdrop-blur-2xl md:hidden">
-        <div className="mx-auto flex w-full max-w-lg items-stretch px-2 pt-2 pb-safe">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/90 backdrop-blur-2xl md:hidden max-w-full overflow-hidden">
+        <div className="flex w-full items-center justify-between overflow-x-auto no-scrollbar px-1 pt-1.5 pb-safe touch-pan-x">
           {items.map((item) => (
             <MobileNavItem key={item.to} item={item} />
           ))}
 
-          <button onClick={handleSignOut} className="flex-1">
+          <button onClick={handleSignOut} className="flex-1 min-w-[44px] shrink-0 text-center">
             <motion.span
               whileTap={{ scale: 0.92 }}
-              className="flex flex-col items-center gap-1 rounded-2xl px-1 py-1 text-[10px] font-semibold text-slate-400"
+              className="flex flex-col items-center gap-0.5 rounded-xl py-1 text-[9.5px] font-semibold text-slate-400"
             >
-              <span className="grid h-10 w-14 place-items-center rounded-2xl border border-transparent">
-                <LogOut size={20} />
+              <span className="grid h-8 w-8 place-items-center rounded-xl border border-transparent">
+                <LogOut size={18} />
               </span>
-              Salir
+              <span className="truncate w-full max-w-[56px] px-0.5 text-center leading-tight">Salir</span>
             </motion.span>
           </button>
         </div>
