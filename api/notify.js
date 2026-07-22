@@ -16,8 +16,8 @@ export default async function handler(req, res) {
   }
 
   // 2. Initialize Supabase
-  const supabaseUrl = process.env.VITE_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://cdewdlswqrwcleuynspu.supabase.co';
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_3jC_HDLBLWt8kGgVfSW7vg_jAx_5vIz';
   
   if (!supabaseUrl || !supabaseKey) {
     return res.status(500).json({ error: 'Supabase credentials not configured in backend.' });
@@ -26,8 +26,8 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   // 3. Initialize Web Push VAPID
-  const vapidPublic = process.env.VITE_VAPID_PUBLIC_KEY;
-  const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
+  const vapidPublic = process.env.VITE_VAPID_PUBLIC_KEY || 'BPQ4NkeY1NtCRcB84TEju4F2kqec8mvmhk-TTUiZKnWAUMSUxbtfP-GnL74mhdgtL4T_-Jz4UxZ0567JIXSzpso';
+  const vapidPrivate = process.env.VAPID_PRIVATE_KEY || 'if4WXmZiUDlW0TivS9WLamE1_VUzvzZxflG_sjiejew';
 
   if (!vapidPublic || !vapidPrivate) {
     return res.status(500).json({ error: 'VAPID keys missing in environment variables.' });

@@ -3,7 +3,9 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Bell, Clock, Save, AlertTriangle, ShieldCheck } from 'lucide-react';
 
-const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+const publicVapidKey =
+  import.meta.env.VITE_VAPID_PUBLIC_KEY ||
+  'BPQ4NkeY1NtCRcB84TEju4F2kqec8mvmhk-TTUiZKnWAUMSUxbtfP-GnL74mhdgtL4T_-Jz4UxZ0567JIXSzpso';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -21,10 +23,11 @@ function urlBase64ToUint8Array(base64String) {
 export default function NotificationSettings() {
   const { user } = useAuth();
   const [isSupported, setIsSupported] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(true);
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   const [prefs, setPrefs] = useState({
     notify_ideas: true,
@@ -40,11 +43,12 @@ export default function NotificationSettings() {
       setIsSupported(true);
     }
 
-    // Check if running as PWA (iOS requires this for push)
+    // Check if running on iOS outside PWA standalone mode
     const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    const isPwa = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-    
-    // We only force standalone requirement strongly on iOS, but let's check it generally
+    const isPwa =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+
     if (isIos && !isPwa) {
       setIsStandalone(false);
     } else {
@@ -56,19 +60,19 @@ export default function NotificationSettings() {
 
   const checkSubscription = async () => {
     if (!user) return;
-    
+
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('push_subscriptions')
         .select('*')
         .eq('user_id', user.id)
-        .single();
-        
+        .maybeSingle();
+
       if (data) {
         setSubscription(data);
         setPrefs({
-          notify_ideas: data.notify_ideas,
-          notify_agenda: data.notify_agenda,
+          notify_ideas: Boolean(data.notify_ideas),
+          notify_agenda: Boolean(data.notify_agenda),
           notify_times: data.notify_times || [],
         });
       }
@@ -80,12 +84,22 @@ export default function NotificationSettings() {
 
   const handleSubscribe = async () => {
     if (!isSupported) {
-      alert('Las notificaciones Push no están soportadas en este navegador.');
+      alert('Las notificaciones Push no están soportadas en este navegador o sistema.');
       return;
     }
-    
+
     setSaving(true);
     try {
+      // Direct user action: Request notification permission first
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          alert('Permiso de notificaciones denegado. Debes habilitarlo en los permisos de tu navegador o sistema.');
+          setSaving(false);
+          return;
+        }
+      }
+
       // Ensure SW is registered
       let registration = await navigator.serviceWorker.getRegistration();
       if (!registration) {
@@ -93,20 +107,12 @@ export default function NotificationSettings() {
       }
       await navigator.serviceWorker.ready;
 
-      // Explicitly request Notification Permission
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        alert('Permiso de notificaciones denegado. Debes habilitarlo en los permisos de tu navegador o sistema.');
-        setSaving(false);
-        return;
-      }
-
       let pushSub = await registration.pushManager.getSubscription();
-      
+
       if (!pushSub) {
         pushSub = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+          applicationServerKey: urlBase64ToUint8Array(publicVapidKey),
         });
       }
 
@@ -128,34 +134,53 @@ export default function NotificationSettings() {
         .upsert(payload, { onConflict: 'endpoint' });
 
       if (error) throw error;
-      
+
       await checkSubscription();
-      alert('¡Notificaciones activadas con éxito!');
+      alert('¡Notificaciones activadas con éxito en este dispositivo!');
     } catch (err) {
       console.error('Error suscribiendo:', err);
-      alert('Error al activar las notificaciones. Revisa la consola o los permisos del navegador.');
+      alert(`Error al activar notificaciones: ${err.message || err}`);
     }
     setSaving(false);
   };
 
   const handleTestNotification = async () => {
+    if (!user) return;
+    setTesting(true);
+
     try {
-      let registration = await navigator.serviceWorker.ready;
-      if (registration) {
-        registration.showNotification('CM Manager - Prueba Local', {
-          body: '¡Las notificaciones Push en tu dispositivo están activas y funcionando!',
-          icon: '/pwa-192x192.png',
-          vibrate: [200, 100, 200]
-        });
+      // 1. Try local notification safely if permitted
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          if (registration && registration.showNotification) {
+            registration.showNotification('CM Manager - Prueba', {
+              body: '¡Notificaciones activas y funcionando en este dispositivo!',
+              icon: '/pwa-192x192.png',
+              badge: '/pwa-192x192.png',
+              vibrate: [200, 100, 200],
+            });
+          }
+        } catch (e) {
+          console.warn('Local showNotification skipped on mobile JS context:', e);
+        }
       }
 
-      // Trigger backend test push
-      if (user) {
-        fetch(`/api/notify?test=true&user_id=${user.id}`).catch(() => {});
+      // 2. Send real Web Push via backend server
+      const res = await fetch(`/api/notify?test=true&user_id=${user.id}`);
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        alert('¡Notificación de prueba enviada! Deberías recibir el aviso en breve.');
+      } else {
+        alert(data.message || data.error || 'Aviso: Notificación solicitada al servidor.');
       }
     } catch (err) {
-      console.error('Error en prueba:', err);
+      console.error('Error enviando prueba:', err);
+      alert(`Error al conectar con el servicio de notificaciones: ${err.message || err}`);
     }
+
+    setTesting(false);
   };
 
   const handleSavePreferences = async () => {
@@ -228,7 +253,7 @@ export default function NotificationSettings() {
             </p>
             <button 
               onClick={handleSubscribe} 
-              disabled={!isStandalone || saving}
+              disabled={saving}
               className="btn-primary"
             >
               <Bell size={18} />
@@ -247,10 +272,11 @@ export default function NotificationSettings() {
               </div>
               <button 
                 onClick={handleTestNotification}
+                disabled={testing}
                 className="btn-glass text-xs py-2 px-3.5 flex items-center gap-2 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 transition"
               >
-                <Bell size={14} />
-                Enviar Notificación de Prueba
+                <Bell size={14} className={testing ? 'animate-bounce' : ''} />
+                {testing ? 'Enviando...' : 'Enviar Notificación de Prueba'}
               </button>
             </div>
 
