@@ -60,6 +60,7 @@ const CATEGORIES = [
   { id: 'Médico', label: 'Salud / Médico', icon: HeartPulse, color: '#ef4444' },
   { id: 'Finanzas', label: 'Finanzas / Admin', icon: DollarSign, color: '#10b981' },
   { id: 'Proyecto', label: 'Proyecto Personal', icon: Briefcase, color: '#06b6d4' },
+  { id: 'Pública / Equipo', label: '📢 Pública / Equipo', icon: Sparkles, color: '#3b82f6' },
   { id: 'Otro', label: 'Otro', icon: Tag, color: '#64748b' },
 ];
 
@@ -133,46 +134,57 @@ export default function PrivateAgenda() {
 
   const fetchActivities = useCallback(async () => {
     setLoading(true);
-    let remoteData = null;
-    let hasRemoteError = false;
+    let privateData = [];
+    let publicPostsData = [];
 
     if (user?.id) {
       try {
-        const { data, error } = await supabase
+        const { data: privRes } = await supabase
           .from('private_activities')
           .select('*')
           .eq('user_id', user.id)
           .order('date', { ascending: true });
 
-        if (!error && data) {
-          remoteData = data;
-        } else {
-          hasRemoteError = true;
-        }
+        if (privRes) privateData = privRes;
       } catch (err) {
-        hasRemoteError = true;
+        console.warn('Notice fetching private activities:', err);
       }
     }
 
-    if (remoteData) {
-      setActivities(remoteData);
-      localStorage.setItem(localStorageKey, JSON.stringify(remoteData));
-    } else if (hasRemoteError || !user?.id) {
-      // Fallback to localStorage
-      const cached = localStorage.getItem(localStorageKey);
-      if (cached) {
-        try {
-          setActivities(JSON.parse(cached));
-        } catch {
-          setActivities([]);
-        }
-      } else {
-        setActivities([]);
+    try {
+      const { data: postsRes } = await supabase
+        .from('posts')
+        .select('*, brands(name, color_theme)')
+        .not('post_date', 'is', null)
+        .order('post_date', { ascending: true });
+
+      if (postsRes) {
+        publicPostsData = postsRes.map((p) => ({
+          id: `public_${p.id}`,
+          original_id: p.id,
+          is_public: true,
+          title: `📢 [${p.brands?.name || 'Marca'}] ${p.title}`,
+          description: p.copy || '',
+          category: 'Pública / Equipo',
+          date: p.post_date,
+          end_date: p.post_date,
+          status: p.status === 'published' ? 'completed' : 'pending',
+          priority: 'medium',
+          color: p.brands?.color_theme || '#3b82f6',
+          location: p.platform,
+        }));
       }
+    } catch (err) {
+      console.warn('Notice fetching public posts for agenda:', err);
     }
 
+    const combined = [...privateData, ...publicPostsData].sort(
+      (a, b) => new Date(a.date) - new Date(b.date)
+    );
+
+    setActivities(combined);
     setLoading(false);
-  }, [user, localStorageKey]);
+  }, [user]);
 
   useEffect(() => {
     fetchActivities();
