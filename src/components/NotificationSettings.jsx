@@ -392,6 +392,13 @@ export default function NotificationSettings() {
               </div>
             </div>
 
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-400 space-y-1 mt-4">
+              <p className="font-bold text-slate-300">ℹ️ Nota sobre los envíos automáticos de notificaciones:</p>
+              <p>
+                Las notificaciones automáticas diarias se ejecutan mediante el servidor del proyecto. En Vercel Hobby, se procesa un resumen diario automático. Si requieres notificaciones frecuentes en horarios exactos durante el día, puedes conectar una tarea recurrente gratuita en <a href="https://cron-job.org" target="_blank" rel="noreferrer" className="text-violet-300 underline font-semibold">cron-job.org</a> llamando a: <code className="text-violet-200 bg-black/40 px-1.5 py-0.5 rounded border border-white/10 font-mono text-[11px] select-all">{window.location.origin}/api/notify</code>.
+              </p>
+            </div>
+
             <div className="flex justify-end pt-4 border-t border-white/10">
               <button 
                 onClick={handleSavePreferences}

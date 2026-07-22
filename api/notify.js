@@ -79,37 +79,34 @@ export default async function handler(req, res) {
 
     for (const sub of subscriptions) {
       const isTargetTest = isTest;
-      let wantsNotificationNow = isTargetTest;
+      let wantsNotificationNow = false;
 
-      if (!wantsNotificationNow) {
-        // Calculate current hour and rounded minute in UTC
-        const currentHour = now.getUTCHours().toString().padStart(2, '0');
-        const currentMin = now.getUTCMinutes();
-        const roundedMin = (Math.floor(currentMin / 15) * 15).toString().padStart(2, '0');
-        const timeString = `${currentHour}:${roundedMin}`;
-
-        // Also check if user has times configured
-        wantsNotificationNow = sub.notify_times && (
-          sub.notify_times.includes(timeString) || sub.notify_times.length > 0
-        );
+      if (isTargetTest) {
+        wantsNotificationNow = true;
+      } else {
+        // Scheduled cron execution: trigger notification for any subscriber with active preferences
+        const hasTimes = Array.isArray(sub.notify_times) && sub.notify_times.length > 0;
+        wantsNotificationNow = Boolean(sub.notify_agenda || sub.notify_ideas || hasTimes);
       }
 
-      // Check last_notified_at to prevent duplicate spam (50 min window)
+      // Prevent duplicate spam within 5 minutes for scheduled runs
       const lastNotified = sub.last_notified_at ? new Date(sub.last_notified_at) : null;
-      const recentlyNotified = lastNotified && (now.getTime() - lastNotified.getTime() < 1000 * 60 * 50);
+      const recentlyNotified = !isTargetTest && lastNotified && (now.getTime() - lastNotified.getTime() < 1000 * 60 * 5);
 
-      if (wantsNotificationNow && (!recentlyNotified || isTargetTest)) {
+      if (wantsNotificationNow && !recentlyNotified) {
         let messageBody = '';
 
         if (isTargetTest) {
           messageBody = '¡Prueba exitosa! Las notificaciones Push funcionan correctamente en tu dispositivo.';
         } else {
+          const parts = [];
           if (sub.notify_agenda && upcomingPosts && upcomingPosts.length > 0) {
-            messageBody += `Tienes ${upcomingPosts.length} posts próximos en agenda. `;
+            parts.push(`Tienes ${upcomingPosts.length} post(s) próximos en agenda.`);
           }
           if (sub.notify_ideas && ideas && ideas.length > 0) {
-            messageBody += `Tienes ${ideas.length} ideas destacadas pendientes de guion.`;
+            parts.push(`Tienes ${ideas.length} idea(s) pendientes de guion.`);
           }
+          messageBody = parts.join(' ') || 'Recuerda revisar tus tareas e ideas del día en CM Manager.';
         }
 
         if (!messageBody) {
