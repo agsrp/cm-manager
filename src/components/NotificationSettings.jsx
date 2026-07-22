@@ -58,6 +58,21 @@ export default function NotificationSettings() {
     checkSubscription();
   }, [user]);
 
+  const syncScheduleToServiceWorker = (times, notifyAgenda, notifyIdeas) => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((reg) => {
+        if (reg.active) {
+          reg.active.postMessage({
+            type: 'SCHEDULE_LOCAL_NOTIFICATIONS',
+            times: times || [],
+            notify_agenda: notifyAgenda,
+            notify_ideas: notifyIdeas,
+          });
+        }
+      });
+    }
+  };
+
   const checkSubscription = async () => {
     if (!user) {
       setLoading(false);
@@ -111,11 +126,13 @@ export default function NotificationSettings() {
 
       if (isSubscribedLocally && activeSub) {
         setSubscription(activeSub);
+        const userTimes = activeSub.notify_times || [];
         setPrefs({
           notify_ideas: Boolean(activeSub.notify_ideas),
           notify_agenda: Boolean(activeSub.notify_agenda),
-          notify_times: activeSub.notify_times || [],
+          notify_times: userTimes,
         });
+        syncScheduleToServiceWorker(userTimes, activeSub.notify_ideas, activeSub.notify_agenda);
       } else {
         setSubscription(null);
       }
@@ -180,6 +197,8 @@ export default function NotificationSettings() {
 
       if (error) throw error;
 
+      syncScheduleToServiceWorker(prefs.notify_times, prefs.notify_agenda, prefs.notify_ideas);
+
       await checkSubscription();
       alert('¡Notificaciones activadas con éxito en este dispositivo!');
     } catch (err) {
@@ -236,7 +255,7 @@ export default function NotificationSettings() {
 
   const handleSavePreferences = async () => {
     if (!subscription) return;
-    
+
     setSaving(true);
     try {
       const { error } = await supabase
@@ -249,7 +268,10 @@ export default function NotificationSettings() {
         .eq('id', subscription.id);
 
       if (error) throw error;
-      alert('Preferencias guardadas.');
+
+      syncScheduleToServiceWorker(prefs.notify_times, prefs.notify_agenda, prefs.notify_ideas);
+
+      alert('Preferencias y horarios guardados correctamente.');
     } catch (err) {
       console.error(err);
       alert('Error al guardar preferencias.');
@@ -390,13 +412,6 @@ export default function NotificationSettings() {
                   ))}
                 </div>
               </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-400 space-y-1 mt-4">
-              <p className="font-bold text-slate-300">ℹ️ Nota sobre los envíos automáticos de notificaciones:</p>
-              <p>
-                Las notificaciones automáticas diarias se ejecutan mediante el servidor del proyecto. En Vercel Hobby, se procesa un resumen diario automático. Si requieres notificaciones frecuentes en horarios exactos durante el día, puedes conectar una tarea recurrente gratuita en <a href="https://cron-job.org" target="_blank" rel="noreferrer" className="text-violet-300 underline font-semibold">cron-job.org</a> llamando a: <code className="text-violet-200 bg-black/40 px-1.5 py-0.5 rounded border border-white/10 font-mono text-[11px] select-all">{window.location.origin}/api/notify</code>.
-              </p>
             </div>
 
             <div className="flex justify-end pt-4 border-t border-white/10">
