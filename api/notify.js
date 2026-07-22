@@ -163,52 +163,98 @@ export default async function handler(req, res) {
           targetUrl = '/calendar';
         }
 
-        const pushSubscription = {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.p256dh,
-            auth: sub.auth,
+        let sendPromise;
+        const pushTitle = isTargetTest ? 'CM Manager - Prueba' : 'CM Manager - Recordatorio';
+
+        if (sub.endpoint && sub.endpoint.startsWith('onesignal:')) {
+          const onesignalPlayerId = sub.endpoint.replace('onesignal:', '');
+          const osApiKey = process.env.ONESIGNAL_REST_API_KEY || '';
+          const osAppId = process.env.VITE_ONESIGNAL_APP_ID || '';
+
+          if (osApiKey && osAppId) {
+            sendPromise = fetch('https://onesignal.com/api/v1/notifications', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Authorization': `Basic ${osApiKey}`
+              },
+              body: JSON.stringify({
+                app_id: osAppId,
+                include_player_ids: [onesignalPlayerId],
+                contents: { es: messageBody, en: messageBody },
+                headings: { es: pushTitle, en: pushTitle },
+                url: `${req.headers.origin || 'https://cm-manager-zeta.vercel.app'}${targetUrl}`
+              })
+            }).then(async () => {
+              await supabase
+                .from('push_subscriptions')
+                .update({ last_notified_at: new Date().toISOString() })
+                .eq('id', sub.id);
+
+              if (duePrivateActs.length > 0) {
+                await supabase
+                  .from('private_activities')
+                  .update({ notification_sent: true })
+                  .in('id', duePrivateActs.map((a) => a.id));
+              }
+              if (duePosts.length > 0) {
+                await supabase
+                  .from('posts')
+                  .update({ notification_sent: true })
+                  .in('id', duePosts.map((p) => p.id));
+              }
+            });
           }
-        };
+        }
 
-        const payload = JSON.stringify({
-          title: isTargetTest ? 'CM Manager - Prueba' : 'CM Manager - Recordatorio',
-          body: messageBody,
-          url: targetUrl
-        });
-
-        const sendPromise = webpush.sendNotification(pushSubscription, payload)
-          .then(async () => {
-            // Update last_notified_at on subscription
-            await supabase
-              .from('push_subscriptions')
-              .update({ last_notified_at: new Date().toISOString() })
-              .eq('id', sub.id);
-
-            // Mark due private activities as notification_sent = true
-            if (duePrivateActs.length > 0) {
-              const actIds = duePrivateActs.map((a) => a.id);
-              await supabase
-                .from('private_activities')
-                .update({ notification_sent: true })
-                .in('id', actIds);
+        if (!sendPromise) {
+          const pushSubscription = {
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.p256dh,
+              auth: sub.auth,
             }
+          };
 
-            // Mark due posts as notification_sent = true
-            if (duePosts.length > 0) {
-              const postIds = duePosts.map((p) => p.id);
-              await supabase
-                .from('posts')
-                .update({ notification_sent: true })
-                .in('id', postIds);
-            }
-          })
-          .catch(err => {
-            console.error('Error sending push to sub:', sub.id, err);
-            if (err.statusCode === 410 || err.statusCode === 404) {
-              return supabase.from('push_subscriptions').delete().eq('id', sub.id);
-            }
+          const payload = JSON.stringify({
+            title: pushTitle,
+            body: messageBody,
+            url: targetUrl
           });
+
+          sendPromise = webpush.sendNotification(pushSubscription, payload)
+            .then(async () => {
+              // Update last_notified_at on subscription
+              await supabase
+                .from('push_subscriptions')
+                .update({ last_notified_at: new Date().toISOString() })
+                .eq('id', sub.id);
+
+              // Mark due private activities as notification_sent = true
+              if (duePrivateActs.length > 0) {
+                const actIds = duePrivateActs.map((a) => a.id);
+                await supabase
+                  .from('private_activities')
+                  .update({ notification_sent: true })
+                  .in('id', actIds);
+              }
+
+              // Mark due posts as notification_sent = true
+              if (duePosts.length > 0) {
+                const postIds = duePosts.map((p) => p.id);
+                await supabase
+                  .from('posts')
+                  .update({ notification_sent: true })
+                  .in('id', postIds);
+              }
+            })
+            .catch(err => {
+              console.error('Error sending push to sub:', sub.id, err);
+              if (err.statusCode === 410 || err.statusCode === 404) {
+                return supabase.from('push_subscriptions').delete().eq('id', sub.id);
+              }
+            });
+        }
 
         notifications.push(sendPromise);
       }

@@ -152,6 +152,17 @@ export default function NotificationSettings() {
 
     setSaving(true);
     try {
+      // 1. Try OneSignal Web SDK subscription if available
+      let onesignalSubId = null;
+      if (window.OneSignal) {
+        try {
+          await window.OneSignal.Notifications.requestPermission();
+          onesignalSubId = window.OneSignal.User?.PushSubscription?.id;
+        } catch (e) {
+          console.warn('OneSignal Web SDK prompt notice:', e);
+        }
+      }
+
       // Direct user action: Request notification permission first
       if ('Notification' in window) {
         const permission = await Notification.requestPermission();
@@ -179,13 +190,14 @@ export default function NotificationSettings() {
       }
 
       const subData = JSON.parse(JSON.stringify(pushSub));
+      const endpointVal = onesignalSubId ? `onesignal:${onesignalSubId}` : subData.endpoint;
 
       // Save to Supabase
       const payload = {
         user_id: user.id,
-        endpoint: subData.endpoint,
-        p256dh: subData.keys.p256dh,
-        auth: subData.keys.auth,
+        endpoint: endpointVal,
+        p256dh: subData.keys?.p256dh || 'onesignal',
+        auth: subData.keys?.auth || onesignalSubId || 'onesignal',
         notify_ideas: prefs.notify_ideas,
         notify_agenda: prefs.notify_agenda,
         notify_times: prefs.notify_times,
