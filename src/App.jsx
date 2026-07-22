@@ -9,6 +9,7 @@ import CalendarPage from './pages/CalendarPage';
 import Production from './pages/Production';
 import Config from './pages/Config';
 import SharedCalendar from './pages/SharedCalendar';
+import PrivateAgenda from './pages/PrivateAgenda';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="/ideas" element={<Ideas />} />
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/private" element={<PrivateAgenda />} />
             <Route path="/production" element={<Production />} />
             <Route path="/config" element={<Config />} />
           </Route>

@@ -167,3 +167,43 @@ with check (true);
 create index if not exists push_subscriptions_user_id_idx on public.push_subscriptions (user_id);
 create index if not exists push_subscriptions_endpoint_idx on public.push_subscriptions (endpoint);
 
+-- =====================================================
+-- Tabla: private_activities (Agenda Personal Privada)
+-- =====================================================
+create table if not exists public.private_activities (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  description text,
+  category text not null default 'Personal',
+  date timestamptz not null,
+  end_date timestamptz,
+  is_all_day boolean default false,
+  status text not null default 'pending'
+    constraint private_activities_status_check
+    check (status in ('pending', 'in_progress', 'completed', 'cancelled')),
+  priority text not null default 'medium'
+    constraint private_activities_priority_check
+    check (priority in ('low', 'medium', 'high', 'urgent')),
+  color text default '#8b5cf6',
+  location text,
+  created_at timestamptz default now()
+);
+
+-- Row Level Security (RLS) - Solo visible y gestionable por el propio usuario
+alter table public.private_activities enable row level security;
+
+drop policy if exists "private_activities_user_all" on public.private_activities;
+create policy "private_activities_user_all"
+on public.private_activities
+for all
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+-- Índices
+create index if not exists private_activities_user_id_idx on public.private_activities (user_id);
+create index if not exists private_activities_date_idx on public.private_activities (date);
+create index if not exists private_activities_status_idx on public.private_activities (status);
+
+

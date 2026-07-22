@@ -7,6 +7,7 @@ import {
   Home,
   Layers,
   Lightbulb,
+  Lock,
   LogOut,
   Settings,
   Sparkles,
@@ -17,6 +18,7 @@ const items = [
   { to: '/ideas', label: 'Ideas', icon: Lightbulb },
   { to: '/pipeline', label: 'Pipeline', icon: Layers },
   { to: '/calendar', label: 'Calendario', icon: CalendarDays },
+  { to: '/private', label: 'Agenda Privada', icon: Lock },
   { to: '/production', label: 'Producción', icon: Clapperboard },
   { to: '/config', label: 'Configuración', icon: Settings },
 ];
