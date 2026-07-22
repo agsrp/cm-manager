@@ -123,13 +123,27 @@ export default async function handler(req, res) {
         wantsNotificationNow = true;
       } else {
         // Scheduled cron summary check
+        // Check current hour in Argentina (UTC-3) against user's notify_times
+        const artTime = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+        const currentLocalHour = artTime.getUTCHours();
+
         const hasTimes = Array.isArray(sub.notify_times) && sub.notify_times.length > 0;
-        wantsNotificationNow = Boolean(sub.notify_agenda || sub.notify_ideas || hasTimes);
+        let isTimeMatched = false;
+        if (hasTimes) {
+          isTimeMatched = sub.notify_times.some((t) => {
+            const [targetHour] = t.split(':').map(Number);
+            return currentLocalHour === targetHour;
+          });
+        } else {
+          isTimeMatched = true; // fallback if no times set
+        }
+
+        wantsNotificationNow = Boolean((sub.notify_agenda || sub.notify_ideas) && isTimeMatched);
       }
 
-      // Prevent duplicate spam within 5 minutes ONLY for generic digest runs
+      // Enforce 3-hour minimum cooldown (3 * 60 * 60 * 1000) for generic messages to prevent 15-min cron spam
       const lastNotified = sub.last_notified_at ? new Date(sub.last_notified_at) : null;
-      const recentlyNotified = !isTargetTest && !hasSpecificDueItems && lastNotified && (now.getTime() - lastNotified.getTime() < 1000 * 60 * 5);
+      const recentlyNotified = !isTargetTest && !hasSpecificDueItems && lastNotified && (now.getTime() - lastNotified.getTime() < 1000 * 60 * 60 * 3);
 
       if (wantsNotificationNow && !recentlyNotified) {
         let messageBody = '';
