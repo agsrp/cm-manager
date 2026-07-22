@@ -201,9 +201,13 @@ to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
--- Índices
-create index if not exists private_activities_user_id_idx on public.private_activities (user_id);
-create index if not exists private_activities_date_idx on public.private_activities (date);
-create index if not exists private_activities_status_idx on public.private_activities (status);
+-- Columna para rastreo de notificaciones de estado
+alter table public.private_activities add column if not exists notification_sent boolean default false;
+alter table public.posts add column if not exists notification_sent boolean default false;
+
+-- Índices adicionales de notificación
+create index if not exists private_activities_notification_sent_idx on public.private_activities (notification_sent);
+create index if not exists posts_notification_sent_idx on public.posts (notification_sent);
+
 
 

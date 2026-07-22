@@ -199,6 +199,7 @@ export default function PrivateAgenda() {
       priority: form.priority,
       color: form.color,
       location: form.location.trim() || null,
+      notification_sent: false,
     };
 
     let updatedList = [...activities];

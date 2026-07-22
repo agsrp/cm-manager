@@ -81,45 +81,75 @@ export default async function handler(req, res) {
       const isTargetTest = isTest;
       let wantsNotificationNow = false;
 
-      if (isTargetTest) {
+      // 1. Query due private activities (date <= NOW and notification_sent is false)
+      let duePrivateActs = [];
+      try {
+        const { data } = await supabase
+          .from('private_activities')
+          .select('*')
+          .eq('user_id', sub.user_id)
+          .lte('date', now.toISOString())
+          .or('notification_sent.is.null,notification_sent.eq.false')
+          .neq('status', 'completed')
+          .neq('status', 'cancelled')
+          .order('date', { ascending: true });
+        duePrivateActs = data || [];
+      } catch (e) {
+        console.warn('Notice checking due private_activities:', e);
+      }
+
+      // 2. Query due posts (post_date <= NOW and notification_sent is false)
+      let duePosts = [];
+      try {
+        const { data } = await supabase
+          .from('posts')
+          .select('*')
+          .lte('post_date', now.toISOString())
+          .or('notification_sent.is.null,notification_sent.eq.false')
+          .neq('status', 'published')
+          .neq('status', 'idea')
+          .order('post_date', { ascending: true });
+        duePosts = data || [];
+      } catch (e) {
+        console.warn('Notice checking due posts:', e);
+      }
+
+      const hasSpecificDueItems = duePrivateActs.length > 0 || duePosts.length > 0;
+
+      if (isTargetTest || hasSpecificDueItems) {
         wantsNotificationNow = true;
       } else {
-        // Scheduled cron execution: trigger notification for any subscriber with active preferences
+        // Scheduled cron summary check
         const hasTimes = Array.isArray(sub.notify_times) && sub.notify_times.length > 0;
         wantsNotificationNow = Boolean(sub.notify_agenda || sub.notify_ideas || hasTimes);
       }
 
-      // Prevent duplicate spam within 5 minutes for scheduled runs
+      // Prevent duplicate spam within 5 minutes ONLY for generic digest runs
       const lastNotified = sub.last_notified_at ? new Date(sub.last_notified_at) : null;
-      const recentlyNotified = !isTargetTest && lastNotified && (now.getTime() - lastNotified.getTime() < 1000 * 60 * 5);
+      const recentlyNotified = !isTargetTest && !hasSpecificDueItems && lastNotified && (now.getTime() - lastNotified.getTime() < 1000 * 60 * 5);
 
       if (wantsNotificationNow && !recentlyNotified) {
         let messageBody = '';
+        let targetUrl = '/private';
 
         if (isTargetTest) {
           messageBody = '¡Prueba exitosa! Las notificaciones Push funcionan correctamente en tu dispositivo.';
-        } else {
-          // Query user specific private activities
-          let privateActs = [];
-          try {
-            const { data } = await supabase
-              .from('private_activities')
-              .select('title, date, category')
-              .eq('user_id', sub.user_id)
-              .neq('status', 'completed')
-              .gte('date', new Date(now.getTime() - 1000 * 60 * 30).toISOString())
-              .order('date', { ascending: true })
-              .limit(3);
-            privateActs = data || [];
-          } catch (e) {
-            console.warn('Notice querying private_activities:', e);
-          }
-
+          targetUrl = '/config';
+        } else if (hasSpecificDueItems) {
           const parts = [];
-          if (privateActs && privateActs.length > 0) {
-            const first = privateActs[0];
-            parts.push(`Actividad Privada: "${first.title}"`);
+          if (duePrivateActs.length > 0) {
+            const first = duePrivateActs[0];
+            parts.push(`⏰ Recordatorio: "${first.title}"`);
+            targetUrl = '/private';
           }
+          if (duePosts.length > 0) {
+            const firstPost = duePosts[0];
+            parts.push(`📌 Post programado: "${firstPost.title}"`);
+            if (duePrivateActs.length === 0) targetUrl = '/calendar';
+          }
+          messageBody = parts.join(' • ');
+        } else {
+          const parts = [];
           if (sub.notify_agenda && upcomingPosts && upcomingPosts.length > 0) {
             parts.push(`Tienes ${upcomingPosts.length} post(s) en agenda.`);
           }
@@ -127,10 +157,7 @@ export default async function handler(req, res) {
             parts.push(`Tienes ${ideas.length} idea(s) pendientes.`);
           }
           messageBody = parts.join(' ') || 'Recuerda revisar tus tareas e ideas del día en CM Manager.';
-        }
-
-        if (!messageBody) {
-          messageBody = 'Recuerda revisar tus tareas e ideas del día en CM Manager.';
+          targetUrl = '/calendar';
         }
 
         const pushSubscription = {
@@ -142,17 +169,36 @@ export default async function handler(req, res) {
         };
 
         const payload = JSON.stringify({
-          title: isTargetTest ? 'CM Manager - Prueba' : 'CM Manager - Resumen',
+          title: isTargetTest ? 'CM Manager - Prueba' : 'CM Manager - Recordatorio',
           body: messageBody,
-          url: '/config'
+          url: targetUrl
         });
 
         const sendPromise = webpush.sendNotification(pushSubscription, payload)
-          .then(() => {
-            return supabase
+          .then(async () => {
+            // Update last_notified_at on subscription
+            await supabase
               .from('push_subscriptions')
               .update({ last_notified_at: new Date().toISOString() })
               .eq('id', sub.id);
+
+            // Mark due private activities as notification_sent = true
+            if (duePrivateActs.length > 0) {
+              const actIds = duePrivateActs.map((a) => a.id);
+              await supabase
+                .from('private_activities')
+                .update({ notification_sent: true })
+                .in('id', actIds);
+            }
+
+            // Mark due posts as notification_sent = true
+            if (duePosts.length > 0) {
+              const postIds = duePosts.map((p) => p.id);
+              await supabase
+                .from('posts')
+                .update({ notification_sent: true })
+                .in('id', postIds);
+            }
           })
           .catch(err => {
             console.error('Error sending push to sub:', sub.id, err);

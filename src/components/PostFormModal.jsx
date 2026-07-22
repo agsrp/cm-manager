@@ -98,6 +98,7 @@ export default function PostFormModal({
       post_date: form.post_date ? new Date(form.post_date).toISOString() : null,
       copy: form.copy.trim(),
       media_url: form.media_url.trim() || null,
+      notification_sent: false,
     };
 
     let result;
